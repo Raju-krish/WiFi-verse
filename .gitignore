@@ -1,0 +1,20 @@
+# secrets
+.token
+.ui-password
+
+# environments and build output
+.venv/
+__pycache__/
+ui/node_modules/
+ui/dist/
+
+# per-run captures and logs (large, and they contain key material)
+runs/*
+!runs/.gitkeep
+
+# saved labs are local; keep the folder
+labs/*
+!labs/.gitkeep
+
+# wmediumd is cloned and patched by scripts/setup.sh
+vendor/wmediumd/

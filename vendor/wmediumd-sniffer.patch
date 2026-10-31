@@ -1,0 +1,75 @@
+diff --git a/wmediumd/config.c b/wmediumd/config.c
+index 11c9693..d3bfcdf 100644
+--- a/wmediumd/config.c
++++ b/wmediumd/config.c
+@@ -711,7 +711,7 @@ static int get_no_fading_signal(struct wmediumd *ctx)
+ int load_config(struct wmediumd *ctx, const char *file, const char *per_file, bool full_dynamic)
+ {
+ 	config_t cfg, *cf;
+-	const config_setting_t *ids, *links, *model_type;
++	const config_setting_t *ids, *links, *model_type, *monitors;
+ 	const config_setting_t *error_probs = NULL, *error_prob;
+ 	const config_setting_t *enable_interference;
+ 	const config_setting_t *fading_coefficient, *noise_threshold, *default_prob;
+@@ -792,6 +792,8 @@ int load_config(struct wmediumd *ctx, const char *file, const char *per_file, bo
+ 		station->index = i;
+ 		memcpy(station->addr, addr, ETH_ALEN);
+ 		memcpy(station->hwaddr, addr, ETH_ALEN);
++		station->hwaddr[0] |= 0x40; /* frames carry hwsim's second radio address */
++		station->monitor = 0;
+ 		station->tx_power = SNR_DEFAULT;
+ 		station->gain = GAIN_DEFAULT;
+ 		//station->height = HEIGHT_DEFAULT;
+@@ -806,6 +808,15 @@ int load_config(struct wmediumd *ctx, const char *file, const char *per_file, bo
+ 	}
+ 	ctx->num_stas = count_ids;
+ 
++        monitors = config_lookup(cf, "ifaces.monitors");
++        for (i = 0; monitors && i < config_setting_length(monitors); i++) {
++                u8 maddr[ETH_ALEN];
++
++                string_to_mac_address(config_setting_get_string_elem(monitors, i), maddr);
++                list_for_each_entry(station, &ctx->stations, list)
++                        if (memcmp(station->addr, maddr, ETH_ALEN) == 0)
++                                station->monitor = 1;
++        }
+ 	enable_interference = config_lookup(cf, "ifaces.enable_interference");
+ 	if (enable_interference &&
+ 	    config_setting_get_bool(enable_interference)) {
+diff --git a/wmediumd/wmediumd.c b/wmediumd/wmediumd.c
+index 5e89160..ac1c356 100644
+--- a/wmediumd/wmediumd.c
++++ b/wmediumd/wmediumd.c
+@@ -923,7 +923,19 @@ void deliver_frame(struct wmediumd *ctx, struct frame *frame)
+ 						      frame->data_len,
+ 						      rate_idx, frame->signal,
+ 						      frame->freq);
+-  			}
++			} else if (station->monitor) {
++				int snr = ctx->get_link_snr(ctx, frame->sender, station);
++				int signal = snr + NOISE_LEVEL;
++
++				if (signal < CCA_THRESHOLD)
++					continue;
++				rate_idx = frame->tx_rates[0].idx;
++				if (drand48() <= ctx->get_error_prob(ctx, (double)snr, rate_idx,
++						frame->freq, frame->data_len, frame->sender, station))
++					continue;
++				send_cloned_frame_msg(ctx, station, frame->data, frame->data_len,
++						      rate_idx, signal, frame->freq);
++			}
+ 		}
+ 	} else
+ 		set_interference_duration(ctx, frame->sender->index,
+diff --git a/wmediumd/wmediumd.h b/wmediumd/wmediumd.h
+index e381deb..10b464c 100644
+--- a/wmediumd/wmediumd.h
++++ b/wmediumd/wmediumd.h
+@@ -177,6 +177,7 @@ struct station {
+ 	//int height;			/* Antenna Height [m] */
+ 	int gRandom;     /* Gaussian Random */
+ 	int isap; 		/* verify whether the node is ap */
++    int monitor;            /* passive sniffer: hears every frame its link allows */
+ 	double freq;			/* frequency [Mhz] */
+ 	struct wqueue queues[IEEE80211_NUM_ACS];
+ 	struct list_head list;
