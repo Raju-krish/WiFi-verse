@@ -145,6 +145,32 @@ wait_for_url() {
     --retry-delay 1 --retry-max-time 25 --max-time 2 "$1" >/dev/null
 }
 
+node_is_supported() {
+  command -v node >/dev/null 2>&1 || return 1
+  node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit((major === 20 && minor >= 19) || (major === 22 && minor >= 12) || major > 22 ? 0 : 1)' >/dev/null 2>&1
+}
+
+ensure_node() {
+  node_is_supported && return 0
+
+  local nvm_dir=${NVM_DIR:-$HOME/.nvm}
+  if [[ -s $nvm_dir/nvm.sh ]]; then
+    export NVM_DIR=$nvm_dir
+    # shellcheck disable=SC1090
+    . "$NVM_DIR/nvm.sh"
+    if ! node_is_supported && command -v nvm >/dev/null 2>&1; then
+      nvm use --silent 22 >/dev/null 2>&1 || nvm use --silent 20 >/dev/null 2>&1 || true
+    fi
+  fi
+
+  if ! node_is_supported; then
+    local found=none
+    command -v node >/dev/null 2>&1 && found=$(node --version 2>/dev/null || echo unknown)
+    echo "Vite 7 requires Node.js 20.19+ or 22.12+; found $found. Install a compatible version (for example: nvm install 22), then retry." >&2
+    return 1
+  fi
+}
+
 save_ports() {
   umask 077
   printf '%s\n%s\n%s\n' "$API_PORT" "$UI_PORT" "$UI_HOST" > "$STATE.tmp"
@@ -183,6 +209,7 @@ stop_ui_pid() {
 start_services() {
   local api_pid ui_pid api_log ui_log api_started=0 ui_launcher_pid
 
+  ensure_node || return 1
   if [[ -n $saved_api && ( $saved_api != "$API_PORT" || $saved_ui != "$UI_PORT" ) ]]; then
     echo "A different managed port pair ($saved_api/$saved_ui) is recorded. Run '$0 stop' first." >&2
     return 1

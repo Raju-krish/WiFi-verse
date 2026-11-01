@@ -142,6 +142,7 @@ You can also use `--api-port=9000` and `--ui-port=3000` forms, or set `--ui-host
 | A lab did not stop cleanly | Stop it in the UI, or `sudo scripts/lab.sh down`. Then `ip netns list` and `lsmod \| grep mac80211_hwsim` should be empty. |
 | `sudo: a password is required` | Set up passwordless sudo (above) or start `scripts/labd.sh` from a root shell. |
 | UI fails with `.token` not found | Start `scripts/labd.sh` once first. |
+| `/usr/bin/env: node: No such file or directory` or Vite reports an old Node version | `scripts/wifi-verse.sh` loads NVM from `$NVM_DIR` or `$HOME/.nvm` and selects an installed compatible version. Install one with `nvm install 22` if needed. The Python API smoke test does not check Node or start Vite. |
 | API ignores Ctrl+C while a browser is open | Stop the lab, then `sudo pkill -f 'uvicorn labd.api'` (repeat, then `-9` if needed). |
 | Sniffers hear nothing | wmediumd is missing the patch: `scripts/setup.sh wmediumd`. |
 
