@@ -1,6 +1,7 @@
 # secrets
 .token
 .ui-password
+.runtime/
 
 # environments and build output
 .venv/

@@ -103,26 +103,27 @@ Run it again until it ends with `Everything needed is in place`. With the API ru
 
 ## Run
 
-Start the API first (it creates the access token the UI proxy needs), then the UI, in two terminals:
+Start the API and UI together, and stop both with the same script:
 
 ```bash
-scripts/labd.sh                                  # API as root on 127.0.0.1:8787
-cd ui && . ~/.nvm/nvm.sh && npm run dev          # UI on port 5173, on every address of the machine
+scripts/wifi-verse.sh start --api-port 9000 --ui-port 3000
+scripts/wifi-verse.sh status
+scripts/wifi-verse.sh stop                       # uses the ports saved by start
 ```
 
 Open <http://localhost:5173>, or `http://<any-ip-of-the-machine>:5173` from another computer, pick a lab on the dashboard, press **Start lab**. Stop the lab when you are done; the page header shows its state.
 
 ### Changing the ports
 
-Defaults are API `8787` (loopback only) and UI `5173`. Give the same values to both processes:
+Defaults are API `8787` (loopback only) and UI `5173`. The manager remembers custom ports, so a plain `stop` stops the pair it started:
 
 ```bash
-API_PORT=9000 UI_PORT=3000 scripts/labd.sh                   # API on 127.0.0.1:9000, accepts the UI on port 3000
-cd ui && API_PORT=9000 UI_PORT=3000 npm run dev              # UI on 3000, proxies /api to 127.0.0.1:9000
+scripts/wifi-verse.sh start --api-port 9000 --ui-port 3000
+scripts/wifi-verse.sh stop
 API_PORT=9000 .venv/bin/python tests/smoke_api.py ft         # tests against the new API port
 ```
 
-`UI_PORT` must be identical for `labd.sh` and `npm run dev` (the API only accepts that UI origin), and `API_PORT` must be identical for `labd.sh` and `npm run dev`. The UI port is strict: if it is taken, the dev server stops instead of picking another.
+You can also use `--api-port=9000` and `--ui-port=3000` forms, or set `--ui-host 127.0.0.1` to keep the UI local. The UI port is passed to the API's origin allow-list, and the API port is passed to Vite's proxy. If either port is occupied by another process, the manager leaves it untouched and reports the conflict. `scripts/labd.sh` and `cd ui && npm run dev` remain available for separate foreground development.
 
 ## Security notes
 
