@@ -5,6 +5,7 @@ Usage: .venv/bin/python tests/smoke_api.py [ft|wpa2]
 """
 import asyncio
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -14,7 +15,8 @@ import httpx
 import websockets
 
 ROOT = Path(__file__).resolve().parent.parent
-BASE = "http://127.0.0.1:8787"
+PORT = os.environ.get("API_PORT", "8787")
+BASE = f"http://127.0.0.1:{PORT}"
 TOKEN = (ROOT / ".token").read_text().strip()
 H = {"Authorization": f"Bearer {TOKEN}"}
 mode = "wpa2-psk" if (sys.argv[1:] == ["wpa2"]) else "ft-psk"
@@ -36,7 +38,7 @@ async def main() -> None:
             check("wrong token rejected", (await anon.get("/api/state", headers={"Authorization": "Bearer nope"})).status_code == 401)
             check("foreign Host header rejected", (await anon.get("/api/health", headers={"Host": "evil.example"})).status_code == 400)
         try:
-            async with websockets.connect(f"ws://127.0.0.1:8787/api/ws?token=bad"):
+            async with websockets.connect(f"ws://127.0.0.1:{PORT}/api/ws?token=bad"):
                 check("ws without token rejected", False)
         except Exception:
             check("ws without token rejected", True)
@@ -54,7 +56,7 @@ async def main() -> None:
         check("second start refused", (await c.post("/api/lab/start", json=topo)).status_code == 409)
 
         frames, events = [], []
-        async with websockets.connect(f"ws://127.0.0.1:8787/api/ws?token={TOKEN}") as ws:
+        async with websockets.connect(f"ws://127.0.0.1:{PORT}/api/ws?token={TOKEN}") as ws:
             snap = json.loads(await ws.recv())
             check("ws snapshot", snap["type"] == "snapshot" and snap["lab"]["state"] == "running")
             sta = None

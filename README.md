@@ -112,6 +112,18 @@ cd ui && . ~/.nvm/nvm.sh && npm run dev          # UI on port 5173, on every add
 
 Open <http://localhost:5173>, or `http://<any-ip-of-the-machine>:5173` from another computer, pick a lab on the dashboard, press **Start lab**. Stop the lab when you are done; the page header shows its state.
 
+### Changing the ports
+
+Defaults are API `8787` (loopback only) and UI `5173`. Give the same values to both processes:
+
+```bash
+API_PORT=9000 UI_PORT=3000 scripts/labd.sh                   # API on 127.0.0.1:9000, accepts the UI on port 3000
+cd ui && API_PORT=9000 UI_PORT=3000 npm run dev              # UI on 3000, proxies /api to 127.0.0.1:9000
+API_PORT=9000 .venv/bin/python tests/smoke_api.py ft         # tests against the new API port
+```
+
+`UI_PORT` must be identical for `labd.sh` and `npm run dev` (the API only accepts that UI origin), and `API_PORT` must be identical for `labd.sh` and `npm run dev`. The UI port is strict: if it is taken, the dev server stops instead of picking another.
+
 ## Security notes
 
 - The API runs **as root** and drives hostapd, wpa_supplicant, tcpdump and the kernel module. It listens on `127.0.0.1` only and requires a bearer token (`.token`, mode 600), a host check and an origin check. Every value that reaches a config file or command line is validated.

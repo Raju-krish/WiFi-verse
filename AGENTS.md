@@ -172,7 +172,7 @@ Roam analysis: `analyze_roam` writes the relevant frame window to a temp pcap an
 
 Start (two long-running terminals):
 ```
-cd ~/wifi-verse && ./scripts/labd.sh                      # API as root, 127.0.0.1:8787
+cd ~/wifi-verse && ./scripts/labd.sh                      # API as root, 127.0.0.1:8787 (API_PORT, UI_PORT env to change; see README)
 cd ~/wifi-verse/ui && . ~/.nvm/nvm.sh && npm run dev     # UI, 0.0.0.0:5173 (UI_HOST=127.0.0.1 to restrict; Node 22 via nvm)
 ```
 Open `http://localhost:5173` (or the LAN IP); there is no login. Restart the API after any `labd/*.py` change; the Vite server hot-reloads (and restarts itself when `vite.config.ts` changes).

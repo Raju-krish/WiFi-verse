@@ -34,7 +34,10 @@ log = logging.getLogger("labd.api")
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
 LABS_DIR = ROOT / "labs"
-UI_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+UI_PORT = os.environ.get("WIFILAB_UI_PORT", "5173")
+if not UI_PORT.isdigit():
+    raise SystemExit("WIFILAB_UI_PORT must be a port number")
+UI_ORIGINS = [f"http://localhost:{UI_PORT}", f"http://127.0.0.1:{UI_PORT}"]
 SOURCE_RE = re.compile(r"^(global|[a-z][a-z0-9]{0,7})$")
 LAB_NAME_RE = re.compile(r"^[a-z0-9_-]{1,40}$")
 RUN_RE = re.compile(r"^\d{8}-\d{6}-[a-z0-9-]{1,20}$")
