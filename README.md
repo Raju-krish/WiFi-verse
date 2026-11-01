@@ -6,6 +6,29 @@ Learn Wi-Fi by running the real thing. Wi-Fi Verse is a web-based lab where ever
 
 No Wi-Fi hardware is needed, and your real Wi-Fi is never touched.
 
+## Demo
+
+Large demo videos are hosted as release assets, so they are not downloaded when cloning the repository:
+
+- [802.11r Fast Transition](https://github.com/Raju-krish/WiFi-verse/releases/download/demo_v1/11r_demo.mp4)
+- [Adding playground devices](https://github.com/Raju-krish/WiFi-verse/releases/download/demo_v1/add_devices_demo.mp4)
+
+### Merged daemon logs
+
+![Merged hostapd and wpa_supplicant logs](demo/merged_hostapd_supp_logs.png)
+
+### Packet details
+
+![Wireshark-style packet details and bytes](demo/packet%20details.png)
+
+### Playground
+
+![Playground with multiple access points and clients](demo/Playground.png)
+
+### Connection and reconnection timings
+
+![Connection and reconnection timing comparison](demo/connect%20and%20reconnect%20timings.png)
+
 ## Labs
 
 | Page | What it teaches |

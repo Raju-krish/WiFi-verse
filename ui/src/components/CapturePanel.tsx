@@ -9,6 +9,7 @@ import { Splitter, useStoredNumber } from './panes'
 
 const FILTERS: [string, string][] = [
   ['Hide beacons and probes', '!(wlan.fc.type_subtype == 0x0008 || wlan.fc.type_subtype == 0x0004 || wlan.fc.type_subtype == 0x0005)'],
+  ['Management + EAPOL (hide beacons/probes)', '(wlan.fc.type == 0 && wlan.fc.type_subtype != 0x0008 && wlan.fc.type_subtype != 0x0004 && wlan.fc.type_subtype != 0x0005) || eapol'],
   ['Hide acknowledgements', 'wlan.fc.type_subtype != 0x001d'],
   ['Management frames', 'wlan.fc.type == 0'],
   ['Authentication and (re)association', 'wlan.fc.type_subtype in {0,1,2,3,11}'],

@@ -1,7 +1,7 @@
 # Wi-Fi Verse: handover notes for the next AI agent
 
 Read this first. It explains what the project is, how it is built, how to run and test it, what has been decided, and which traps were already hit.
-Everything lives under `/home/raju/wifi-verse` on the user's Ubuntu host. The user is `raju`.
+Use the repository root and home-directory shortcuts in examples; do not assume a workstation-specific username or absolute home path.
 The project is called **Wi-Fi Verse**; the directory was renamed from `wifi-lab` to `wifi-verse`. Internal names stay as they were on purpose: package `labd`, `tools/wifilab.py`, `/run/wifilab`, `WIFILAB_*` variables, `wifilab.*` localStorage keys, the NetworkManager drop-in `90-wifilab-unmanaged.conf`. README.md is the public entry point (install, smoke test, security notes).
 
 ## 1. What the project is
@@ -192,7 +192,7 @@ Run directory `runs/<timestamp>-<mode>/` (kept after stop): `ap*.conf/.log`, `st
 Driving the UI from the integrated browser tool (what worked, what did not):
 - The tool appends an accessibility-snapshot diff to every call. A large changing DOM floods the context. The packet list is virtualised now, but still **avoid full reloads and `read_page`** while the lab runs, and stop the lab before snapshot-heavy steps. Use `screenshot_page`, or return small JSON from `run_playwright_code`.
 - The browser runs on the user's desktop. Files written by Playwright (for example screenshots to `/tmp`) are **not** on the server. `setViewportSize` does not stick (the pane stays about 700-1000 px wide).
-- The UI no longer has a login. Anyone who can reach port 5173 can use the lab through the proxy, which attaches the root-level API token. Keep the host on a trusted network, or bind `server.host` to 127.0.0.1 and use an SSH tunnel (`ssh -L 5173:127.0.0.1:5173 raju@<host-ip>`).
+- The UI no longer has a login. Anyone who can reach port 5173 can use the lab through the proxy, which attaches the root-level API token. Keep the host on a trusted network, or bind `server.host` to 127.0.0.1 and use an SSH tunnel (`ssh -L 5173:127.0.0.1:5173 user@<host-ip>`).
 - HTML5 drag-and-drop is not triggered by Playwright's `dragTo`; dispatch synthetic `dragstart`/`dragover`/`drop` events with a `DataTransfer`, or use the palette click.
 - `.canvas svg` matches icons too; use `.canvas > svg`.
 
@@ -201,7 +201,7 @@ Driving the UI from the integrated browser tool (what worked, what did not):
 - `server.host` comes from `UI_HOST` and defaults to `0.0.0.0`, so the UI is reachable on the LAN, Tailscale and Docker bridge addresses (by IP; Vite refuses unknown hostnames). `UI_HOST=127.0.0.1` restricts it. The API stays on loopback only.
 - Because that exposes a proxy that attaches the root-level API token, a **password gate** was added: a Vite plugin demands HTTP Basic auth (user `lab`, password from `~/wifi-verse/.ui-password`, generated once, 600, compared with `timingSafeEqual`). It guards both normal requests and WebSocket upgrades (upgrades skip the middleware chain, so a `prependListener('upgrade')` hook rewrites the URL and ends the socket with 401).
 - The proxy injects the Bearer token and rewrites `Origin` to `http://127.0.0.1:5173` **only** when the request's Origin equals the page's own `http://<host>`; any other origin is forwarded unchanged and the API refuses it (protects against cross-site requests that ride the cached Basic credentials).
-- Basic auth over plain HTTP is readable on the network: fine on a trusted LAN or Tailscale, otherwise use TLS or an SSH tunnel (`ssh -L 5173:127.0.0.1:5173 raju@<host-ip>`).
+- Basic auth over plain HTTP is readable on the network: fine on a trusted LAN or Tailscale, otherwise use TLS or an SSH tunnel (`ssh -L 5173:127.0.0.1:5173 user@<host-ip>`).
 
 ## 10. Gotchas already solved (do not rediscover)
 
