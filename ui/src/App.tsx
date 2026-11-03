@@ -21,7 +21,7 @@ import { NetworkOverview } from './components/NetworkOverview'
 import { RoamPanel } from './components/RoamPanel'
 import { SignalChart } from './components/SignalChart'
 import { Link, useRoute } from './router'
-import { connect, loadLab, refresh, useStore } from './store'
+import { connect, getState, loadLab, refresh, stopLab, toast as showToast, useStore } from './store'
 import type { LabKind } from './store'
 
 function Section({ id, n, title, lead, children }: { id: string; n: number; title: string; lead: string; children: React.ReactNode }) {
@@ -265,6 +265,25 @@ export default function App() {
   useEffect(() => {
     if (kind && labState === 'stopped') loadLab(kind)
   }, [kind, labState, topoKind])
+
+  // Closing or reloading the browser tab stops the lab; merely switching to another browser tab does not.
+  useEffect(() => {
+    const onPageHide = () => {
+      if (getState().lab.state === 'running') navigator.sendBeacon('/api/lab/stop')
+    }
+    window.addEventListener('pagehide', onPageHide)
+    return () => window.removeEventListener('pagehide', onPageHide)
+  }, [])
+
+  // Switching to another page of the app stops the lab.
+  useEffect(() => {
+    return () => {
+      if (getState().lab.state === 'running') {
+        showToast('Lab stopped: you left the page')
+        void stopLab()
+      }
+    }
+  }, [route])
 
   const wrongSetup = kind !== null && topoKind !== kind
 

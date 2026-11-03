@@ -24,6 +24,8 @@ export interface State {
   /** Asks the daemon console to open a tab. */
   pendingTab: { tab: 'terminal' | 'logs' | 'roam'; n: number } | null
   captureStopped: boolean
+  /** Why recording stopped, as reported by the API. */
+  captureReason: string
   /** Recording is paused because the client is connected; it resumes on reconnect. */
   capturePaused: boolean
   /** Bumped when the client connected again, so the connection panel measures the new attempt. */
@@ -142,6 +144,7 @@ let state: State = {
   pendingFilter: null,
   pendingTab: null,
   captureStopped: false,
+  captureReason: '',
   capturePaused: false,
   connectTick: 0,
   codeFocus: null,
@@ -235,11 +238,11 @@ function onMessage(m: { type: string; [k: string]: unknown }): void {
     case 'snapshot': {
       applyLab(m.lab as LabSnapshot)
       const frames = m.frames as Frame[]
-      setState({ roams: m.roams as Roam[], frames: frames.length ? { ...state.frames, global: frames } : state.frames, captureStopped: m.capture === 'stopped', capturePaused: m.capture === 'paused' })
+      setState({ roams: m.roams as Roam[], frames: frames.length ? { ...state.frames, global: frames } : state.frames, captureStopped: m.capture === 'stopped', captureReason: (m.capture_reason as string) || '', capturePaused: m.capture === 'paused' })
       break
     }
     case 'capture':
-      setState({ captureStopped: m.state === 'stopped', capturePaused: m.state === 'paused' })
+      setState({ captureStopped: m.state === 'stopped', captureReason: (m.reason as string) || '', capturePaused: m.state === 'paused' })
       break
     case 'lab': {
       const s = m.state as LabState

@@ -44,6 +44,7 @@ export function CapturePanel() {
   const focusTick = useStore((s) => s.focusTick)
   const pendingFilter = useStore((s) => s.pendingFilter)
   const captureStopped = useStore((s) => s.captureStopped)
+  const captureReason = useStore((s) => s.captureReason)
   const capturePaused = useStore((s) => s.capturePaused)
   const rootRef = useRef<HTMLDivElement>(null)
 
@@ -433,7 +434,7 @@ export function CapturePanel() {
         </span>
         <span>Decrypted: {decryptedCount}</span>
         {paused && <span className="warn">Display paused</span>}
-        {viewRun ? <span>Saved capture</span> : labState === 'running' ? captureStopped ? <span className="warn">Capture stopped: the client finished roaming</span> : capturePaused ? (
+        {viewRun ? <span>Saved capture</span> : labState === 'running' ? captureStopped ? <span className="warn">Capture stopped{captureReason ? `: ${captureReason}` : ''}</span> : capturePaused ? (
           <span className="warn">
             Recording paused: the client is connected, so no more beacons are stored.{' '}
             <button className="link" onClick={() => void api.captureResume().catch((e: Error) => toast(e.message))}>

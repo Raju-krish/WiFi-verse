@@ -32,6 +32,7 @@ SUBTYPES = {
 }
 RING = 5000
 FLUSH_SECONDS = 0.1
+MAX_CAPTURE_BYTES = 50 * 1024 * 1024  # per capture file; recording stops when a source reaches it
 
 
 def pcap_snapshot(path: Path) -> bytes:
@@ -135,6 +136,8 @@ class FrameStream:
         self._air_len: dict = {}  # frame number -> length as heard, before decryption shortens it
         self.t0: Optional[float] = None
         self.paused = False  # packets heard while paused are dropped before they reach the files or tshark
+        self.on_limit: Optional[Callable[[str], None]] = None  # called once when the capture file reaches the size cap
+        self.size = 0
         self._batch: list = []
         self._procs: list = []
         self._task: Optional[asyncio.Task] = None
@@ -203,6 +206,7 @@ class FrameStream:
             endian = "<" if hdr[:4] == b"\xd4\xc3\xb2\xa1" else ">"
             for sink in (raw, dec, out_tsh):
                 sink.write(hdr)
+            self.size = len(hdr)
             n = 0
             while True:
                 rec = await dump.stdout.readexactly(16)
@@ -223,6 +227,11 @@ class FrameStream:
                 raw.flush()
                 dec.flush()
                 await out_tsh.drain()
+                self.size += len(rec) + len(pkt)
+                if self.size >= MAX_CAPTURE_BYTES:
+                    if self.on_limit:
+                        self.on_limit(self.sid)
+                    return
         finally:
             raw.close()
             dec.close()

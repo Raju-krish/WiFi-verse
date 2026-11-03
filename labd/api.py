@@ -6,11 +6,13 @@ import logging
 import os
 import re
 import secrets
+import shutil
 import struct
 import tempfile
 import time
 import xml.etree.ElementTree as ET
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -25,7 +27,7 @@ import wifilab
 from . import ROOT
 from .cli import LAB_COMMANDS, catalog, parse
 from .engine import RUNS_DIR, EngineError, LabEngine
-from .frames import FrameStream, load_capture, pcap_record, pcap_snapshot
+from .frames import MAX_CAPTURE_BYTES, FrameStream, load_capture, pcap_record, pcap_snapshot
 from .ftcache import report as ft_report
 from .keys import KeyTracker
 from .models import PRESETS, Topology
@@ -43,6 +45,9 @@ LAB_NAME_RE = re.compile(r"^[a-z0-9_-]{1,40}$")
 RUN_RE = re.compile(r"^\d{8}-\d{6}-[a-z0-9-]{1,20}$")
 NODE_RE = re.compile(r"^[a-z][a-z0-9]{0,7}$")
 LOG_TAIL_BYTES = 4_000_000
+RUN_MAX_AGE_S = 2 * 24 * 3600  # runs (captures and logs) older than this are deleted
+PRUNE_INTERVAL_S = 3600
+NO_VIEWER_STOP_S = 30.0  # a running lab with no browser connected this long is stopped
 TOKEN_FILE = os.environ.get("WIFILAB_TOKEN_FILE")
 if not TOKEN_FILE:
     raise SystemExit("WIFILAB_TOKEN_FILE is not set; start the service with scripts/labd.sh")
@@ -80,6 +85,7 @@ class Session:
         self.prev_ap: dict = {}
         self.walks: dict = {}
         self.capture_stopped = False
+        self.capture_reason = ""
         self.roam_gen = 0
         self.paused: Optional[str] = None  # why recording is paused, or None while it records
         self.connected: dict = {}
@@ -89,6 +95,7 @@ class Session:
     def reset(self) -> None:
         self.roams, self.prev_ap = [], {}
         self.capture_stopped = False
+        self.capture_reason = ""
         self.paused, self.connected = None, {}
         self.t_start = time.monotonic()
         self.pause_gen += 1
@@ -113,6 +120,8 @@ async def start_streams(run_dir: Path, sources: list, logs: dict) -> None:
     session.keys = KeyTracker(logs)
     for s in sources:
         stream = FrameStream(s["id"], s["ns"], s["iface"], run_dir, session.keys, hub.publish)
+        stream.on_limit = lambda sid: asyncio.create_task(
+            stop_capture(f"the capture of {sid} reached {MAX_CAPTURE_BYTES // 2**20} MB"))
         stream.start()
         session.streams[s["id"]] = stream
 
@@ -140,6 +149,7 @@ async def stop_capture(reason: str) -> None:
     if session.capture_stopped:
         return
     session.capture_stopped = True
+    session.capture_reason = reason
     for stream in list(session.streams.values()):
         await stream.stop()
     hub.publish({"type": "capture", "state": "stopped", "reason": reason})
@@ -216,10 +226,57 @@ async def analyze_roam(sta: dict, frm: str, to: str, t_detect: float, to_mac: st
         asyncio.create_task(auto_stop_capture(session.roam_gen))
 
 
+def prune_runs() -> int:
+    """Delete run directories (and CLI compare results) older than RUN_MAX_AGE_S; the active run is never touched."""
+    cutoff = time.time() - RUN_MAX_AGE_S
+    active = engine.run_dir if engine.state != "stopped" else None
+    removed = 0
+    if not RUNS_DIR.is_dir():
+        return removed
+    for p in RUNS_DIR.iterdir():
+        try:
+            is_run = p.is_dir() and RUN_RE.match(p.name)
+            if not (is_run or (p.is_file() and p.name.startswith("compare-") and p.suffix == ".json")) or p == active:
+                continue
+            # A run's age is its start time (the name); its directory mtime only reflects file creation.
+            created = datetime.strptime(p.name[:15], "%Y%m%d-%H%M%S").timestamp() if is_run else p.stat().st_mtime
+            if created >= cutoff:
+                continue
+            shutil.rmtree(p) if is_run else p.unlink()
+            removed += 1
+        except (OSError, ValueError):
+            log.exception("could not remove %s", p)
+    if removed:
+        log.info("removed %d run(s) older than %d hours", removed, RUN_MAX_AGE_S // 3600)
+    return removed
+
+
+async def prune_loop() -> None:
+    while True:
+        await asyncio.to_thread(prune_runs)
+        await asyncio.sleep(PRUNE_INTERVAL_S)
+
+
+async def stop_lab_now() -> None:
+    await stop_streams()
+    await asyncio.to_thread(engine.stop)
+
+
 async def poll_loop() -> None:
+    no_viewer_since: Optional[float] = None
     while True:
         await asyncio.sleep(0.5)
         if engine.state != "running":
+            no_viewer_since = None
+            continue
+        if hub.subs:
+            no_viewer_since = None
+        elif no_viewer_since is None:
+            no_viewer_since = time.monotonic()
+        elif time.monotonic() - no_viewer_since > NO_VIEWER_STOP_S:
+            log.info("no browser connected for %ds; stopping the lab", NO_VIEWER_STOP_S)
+            no_viewer_since = None
+            await stop_lab_now()
             continue
         try:
             data = await asyncio.to_thread(engine.poll)
@@ -268,8 +325,10 @@ async def do_walk(node_id: str, tx: float, ty: float, speed: float) -> None:
 async def lifespan(app: FastAPI):
     hub.loop = asyncio.get_running_loop()
     poller = asyncio.create_task(poll_loop())
+    pruner = asyncio.create_task(prune_loop())
     yield
     poller.cancel()
+    pruner.cancel()
     await stop_streams()
     await asyncio.to_thread(engine.stop)
 
@@ -383,8 +442,7 @@ async def lab_start(topo: Topology) -> dict:
 
 @app.post("/api/lab/stop", dependencies=[Depends(auth)])
 async def lab_stop() -> dict:
-    await stop_streams()
-    await asyncio.to_thread(engine.stop)
+    await stop_lab_now()
     return engine.snapshot()
 
 
@@ -776,7 +834,8 @@ async def ws(websocket: WebSocket) -> None:
         recent = sorted(list(session.streams["global"].ring)[-200:] + list(session.streams["global"].beacons)[-20:],
                         key=lambda f: f["n"]) if "global" in session.streams else []
         await websocket.send_json({"type": "snapshot", "lab": engine.snapshot(), "roams": session.roams, "frames": recent,
-                                   "capture": "stopped" if session.capture_stopped else "paused" if session.paused else "live"})
+                                   "capture": "stopped" if session.capture_stopped else "paused" if session.paused else "live",
+                                   "capture_reason": session.capture_reason})
         while True:
             await websocket.send_json(await queue.get())
     except WebSocketDisconnect:
